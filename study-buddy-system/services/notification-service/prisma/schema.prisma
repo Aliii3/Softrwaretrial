@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // MATCH_FOUND | SESSION_CREATED | SESSION_INVITATION | BUDDY_REQUEST
+  message   String
+  isRead    Boolean  @default(false)
+  metadata  String?  // JSON string for extra event data
+  createdAt DateTime @default(now())
+}

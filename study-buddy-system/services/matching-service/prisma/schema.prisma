@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Cached user profile data consumed from Kafka events
+model UserProfile {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  courses    String[]
+  topics     String[]
+  studyPace  String?
+  studyMode  String?
+  groupSize  Int?
+  studyStyle String?
+  updatedAt  DateTime @updatedAt
+}
+
+// Cached availability data consumed from Kafka events
+model UserAvailability {
+  id        String   @id @default(uuid())
+  userId    String
+  dayOfWeek String
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, dayOfWeek, startTime])
+}
+
+// Computed match results
+model Match {
+  id            String   @id @default(uuid())
+  userId        String
+  matchedUserId String
+  score         Float
+  reasons       String[]
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, matchedUserId])
+}

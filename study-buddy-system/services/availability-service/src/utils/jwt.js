@@ -1,0 +1,9 @@
+import 'dotenv/config';
+import jwt from "jsonwebtoken";
+
+export const verifyToken = (token) => {
+  return jwt.verify(token, process.env.JWT_SECRET);
+};
+
+console.log("JWT_SECRET:", process.env.JWT_SECRET);
+// console.log(process.env);
