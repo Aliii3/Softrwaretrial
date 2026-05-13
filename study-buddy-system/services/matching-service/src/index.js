@@ -30,6 +30,6 @@ const server = new ApolloServer({
   },
 });
 
-server.listen({ port: parseInt(process.env.PORT) || 4004 }).then(({ url }) => {
+server.listen({ port: parseInt(process.env.PORT || "4004", 10), host: "0.0.0.0" }).then(({ url }) => {
   console.log(`Matching Service ready at ${url}`);
 });

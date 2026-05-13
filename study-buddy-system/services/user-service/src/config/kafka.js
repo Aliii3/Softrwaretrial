@@ -2,7 +2,7 @@ import { Kafka } from "kafkajs";
 
 const kafka = new Kafka({
   clientId: "user-service",
-  brokers: (process.env.KAFKA_BROKERS || 'kafka:9092').split(','),
+  brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BROKER || 'kafka:9092').split(','),
 });
 
 const producer = kafka.producer();

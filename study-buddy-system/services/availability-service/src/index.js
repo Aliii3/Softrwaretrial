@@ -20,16 +20,13 @@ const server = new ApolloServer({
   resolvers,
   
 });
-console.log("JWT SECRET LOADED:", process.env.JWT_SECRET);
+const port = parseInt(process.env.PORT || "4000", 10);
 const { url } = await startStandaloneServer(server, {
-  listen: { port: 4000 },
+  listen: { port, host: "0.0.0.0" },
   
   context: async ({ req }) => {
     const rawHeader = req.headers.authorization || req.headers.Authorization || "";
     const authHeader = rawHeader.replace(/^"+|"+$/g, "");
-
-  console.log("HEADERS:", req.headers);
-
 
   const token = authHeader.startsWith("Bearer ")
   ? authHeader.split(" ")[1]
@@ -42,7 +39,6 @@ const { url } = await startStandaloneServer(server, {
     return { user: null };
   }
 
-  console.log("AUTHENTICATED USER:", user);
   return { user, isDevUser: false };
 },
 });

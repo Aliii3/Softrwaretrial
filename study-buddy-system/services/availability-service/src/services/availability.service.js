@@ -1,7 +1,7 @@
-const prisma = require('../config/db');
-const { Prisma } = require('@prisma/client');
-const { sendEvent } = require('../config/kafka');
-const { v4: uuidv4 } = require('uuid');
+import prisma from '../config/db.js';
+import { Prisma } from '@prisma/client';
+import { sendEvent } from '../config/kafka.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -65,20 +65,20 @@ const publishAvailabilityEvent = async (userId, slotId, action) => {
   });
 };
 
-const getAllSlots = async (userId) => {
+export const getAllSlots = async (userId) => {
   return prisma.availabilitySlot.findMany({
     where: { userId },
     orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
   });
 };
 
-const getOneSlot = async (id) => {
+export const getOneSlot = async (id) => {
   return prisma.availabilitySlot.findUnique({
     where: { id },
   });
 };
 
-const createSlot = async (userId, dayOfWeek, startTime, endTime) => {
+export const createSlot = async (userId, dayOfWeek, startTime, endTime) => {
   const normalizedDay = normalizeDayOfWeek(dayOfWeek);
   const { start, end } = validateTimeRange(startTime, endTime);
 
@@ -103,7 +103,7 @@ const createSlot = async (userId, dayOfWeek, startTime, endTime) => {
   return slot;
 };
 
-const deleteSlot = async (id) => {
+export const deleteSlot = async (id) => {
   const deleted = await prisma.availabilitySlot.delete({
     where: { id },
   });
@@ -113,7 +113,7 @@ const deleteSlot = async (id) => {
   return deleted;
 };
 
-const updateSlot = async (id, updates) => {
+export const updateSlot = async (id, updates) => {
   const exists = await getOneSlot(id);
 
   if (!exists) {
@@ -160,10 +160,3 @@ const assertNoOverlap = async (db, userId, dayOfWeek, startTime, endTime, exclud
   }
 };
 
-module.exports = {
-  getAllSlots,
-  getOneSlot,
-  createSlot,
-  deleteSlot,
-  updateSlot,
-};

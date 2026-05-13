@@ -23,6 +23,6 @@ const server = new ApolloServer({
   },
 });
 
-server.listen({ port: parseInt(process.env.PORT) || 4003 }).then(({ url }) => {
+server.listen({ port: parseInt(process.env.PORT || "4003", 10), host: "0.0.0.0" }).then(({ url }) => {
   console.log(`Notification Service ready at ${url}`);
 });

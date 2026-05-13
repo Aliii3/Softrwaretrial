@@ -22,6 +22,8 @@ const server = new ApolloServer({
   },
 });
 
-server.listen({ port: 4001 }).then(({ url }) => {
+const port = parseInt(process.env.PORT || "4001", 10);
+
+server.listen({ port, host: "0.0.0.0" }).then(({ url }) => {
   console.log(`Server ready at ${url}`);
 });

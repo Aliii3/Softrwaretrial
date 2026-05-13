@@ -1,10 +1,10 @@
-const {
+import {
   getAllSlots,
   getOneSlot,
   createSlot,
   updateSlot,
   deleteSlot,
-} = require('../services/availability.service');
+} from '../services/availability.service.js';
 
 const formatSlot = (slot) => ({
   ...slot,
@@ -105,4 +105,4 @@ const resolvers = {
   },
 };
 
-module.exports = resolvers;
+export default resolvers;

@@ -2,7 +2,7 @@ import { Kafka } from "kafkajs";
 
 const kafka = new Kafka({
   clientId: "notification-service",
-  brokers: [process.env.KAFKA_BROKER || "kafka:9092"],
+  brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BROKER || "kafka:9092").split(","),
 });
 
 const consumer = kafka.consumer({ groupId: "notification-service-group" });

@@ -1,18 +1,18 @@
-const { Kafka } = require('kafkajs');
+import { Kafka } from 'kafkajs';
 
 const kafka = new Kafka({
   clientId: 'availability-service',
-  brokers: (process.env.KAFKA_BROKERS || 'kafka:9092').split(','),
+  brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BROKER || 'kafka:9092').split(','),
 });
 
 const producer = kafka.producer();
 
-const connectProducer = async () => {
+export const connectProducer = async () => {
   await producer.connect();
   console.log('Kafka Producer Connected');
 };
 
-const sendEvent = async (topic, message) => {
+export const sendEvent = async (topic, message) => {
   await producer.send({
     topic,
     messages: [
@@ -23,7 +23,3 @@ const sendEvent = async (topic, message) => {
   });
 };
 
-module.exports = {
-  connectProducer,
-  sendEvent,
-};

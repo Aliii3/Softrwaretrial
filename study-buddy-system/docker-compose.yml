@@ -30,8 +30,9 @@ services:
       - ./services/availability-service/.env
     environment:
       PORT: 4000
-      DATABASE_URL: "postgresql://neondb_owner:npg_H4gQO0tGbpCn@ep-frosty-hat-aee84lxe-pooler.c-2.us-east-2.aws.neon.tech/availability?sslmode=require&channel_binding=require"
+      DATABASE_URL: ${AVAILABILITY_DATABASE_URL:?Set AVAILABILITY_DATABASE_URL}
       KAFKA_BROKER: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
     command: sh -c "npx prisma migrate deploy && node src/index.js"
 
   user-service:
@@ -45,7 +46,10 @@ services:
     env_file:
       - ./services/user-service/.env
     environment:
+      PORT: 4001
+      DATABASE_URL: ${USER_DATABASE_URL:?Set USER_DATABASE_URL}
       KAFKA_BROKER: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
     command: node src/index.js
   
   study-session:
@@ -59,9 +63,9 @@ services:
     
     environment:
       PORT: 4002
-      DATABASE_URL: "postgresql://neondb_owner:npg_rKlnU7LP8htS@ep-blue-mode-an8k5me2-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+      DATABASE_URL: ${STUDY_SESSION_DATABASE_URL:?Set STUDY_SESSION_DATABASE_URL}
       KAFKA_BROKER: kafka:9092
-      JWT_SECRET: supersecretkey123
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
     command: "node src/index.js"
   
   notification-service:
@@ -76,8 +80,8 @@ services:
     environment:
       PORT: 4003
       KAFKA_BROKER: kafka:9092
-      DATABASE_URL: postgresql://neondb_owner:npg_H4gQO0tGbpCn@ep-frosty-hat-aee84lxe-pooler.c-2.us-east-2.aws.neon.tech/Notification?sslmode=require&channel_binding=require
-      JWT_SECRET: supersecretkey123
+      DATABASE_URL: ${NOTIFICATION_DATABASE_URL:?Set NOTIFICATION_DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
 
   matching-service:
     build: ./services/matching-service
@@ -90,8 +94,8 @@ services:
     environment:
       PORT: 4004
       KAFKA_BROKER: kafka:9092
-      DATABASE_URL: postgresql://neondb_owner:npg_H4gQO0tGbpCn@ep-frosty-hat-aee84lxe-pooler.c-2.us-east-2.aws.neon.tech/Matching?sslmode=require&channel_binding=require
-      JWT_SECRET: supersecretkey123
+      DATABASE_URL: ${MATCHING_DATABASE_URL:?Set MATCHING_DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
   profile-service:
     build: ./services/profile-preferences-service
     container_name: profile-preferences-service
@@ -103,5 +107,5 @@ services:
     environment:
       PORT: 4005
       KAFKA_BROKER: kafka:9092
-      DATABASE_URL: postgresql://neondb_owner:npg_H4gQO0tGbpCn@ep-frosty-hat-aee84lxe-pooler.c-2.us-east-2.aws.neon.tech/Preferences?sslmode=require&channel_binding=require
-      JWT_SECRET: supersecretkey123
+      DATABASE_URL: ${PROFILE_DATABASE_URL:?Set PROFILE_DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
