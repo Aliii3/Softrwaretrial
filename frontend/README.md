@@ -20,11 +20,11 @@ npm run dev -- --port 3000
 
 ## Backend URLs
 
-Copy `.env.example` to `.env.local` if your services are not on the default ports:
+Copy `.env.example` to `.env.local` if you need to override the deployed backend URLs:
 
-- User/auth: `NEXT_PUBLIC_USER_API=http://localhost:4001/graphql`
-- Availability: `NEXT_PUBLIC_AVAILABILITY_API=http://localhost:4000/graphql`
-- Study sessions: `NEXT_PUBLIC_SESSION_API=http://localhost:4002/graphql`
-- Notifications: `NEXT_PUBLIC_NOTIFICATION_API=http://localhost:4003/graphql`
-- Matching: `NEXT_PUBLIC_MATCHING_API=http://localhost:4004/graphql`
-- Profile preferences: `NEXT_PUBLIC_PROFILE_API=http://localhost:4005/graphql`
+- User/auth: `NEXT_PUBLIC_USER_API=https://user-service-production-ad5c.up.railway.app/graphql`
+- Availability: `NEXT_PUBLIC_AVAILABILITY_API=https://availability-service-production-95c1.up.railway.app/graphql`
+- Study sessions: `NEXT_PUBLIC_SESSION_API=https://studysessionservice-production.up.railway.app/graphql`
+- Notifications: `NEXT_PUBLIC_NOTIFICATION_API=https://notificationservice-production-6cc2.up.railway.app/graphql`
+- Matching: `NEXT_PUBLIC_MATCHING_API=https://matching-service-production-7bb4.up.railway.app/graphql`
+- Profile preferences: `NEXT_PUBLIC_PROFILE_API=https://profile-production-14b5.up.railway.app/graphql`

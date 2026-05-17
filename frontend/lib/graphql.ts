@@ -1,12 +1,12 @@
 import type { ServiceKey } from "@/types/domain";
 
 const endpoints: Record<ServiceKey, string> = {
-  user: process.env.NEXT_PUBLIC_USER_API || "http://localhost:4001/graphql",
-  availability: process.env.NEXT_PUBLIC_AVAILABILITY_API || "http://localhost:4000/graphql",
-  session: process.env.NEXT_PUBLIC_SESSION_API || "http://localhost:4002/graphql",
-  notification: process.env.NEXT_PUBLIC_NOTIFICATION_API || "http://localhost:4003/graphql",
-  matching: process.env.NEXT_PUBLIC_MATCHING_API || "http://localhost:4004/graphql",
-  profile: process.env.NEXT_PUBLIC_PROFILE_API || "http://localhost:4005/graphql"
+  user: process.env.NEXT_PUBLIC_USER_API || "https://user-service-production-ad5c.up.railway.app/graphql",
+  availability: process.env.NEXT_PUBLIC_AVAILABILITY_API || "https://availability-service-production-95c1.up.railway.app/graphql",
+  session: process.env.NEXT_PUBLIC_SESSION_API || "https://studysessionservice-production.up.railway.app/graphql",
+  notification: process.env.NEXT_PUBLIC_NOTIFICATION_API || "https://notificationservice-production-6cc2.up.railway.app/graphql",
+  matching: process.env.NEXT_PUBLIC_MATCHING_API || "https://matching-service-production-7bb4.up.railway.app/graphql",
+  profile: process.env.NEXT_PUBLIC_PROFILE_API || "https://profile-production-14b5.up.railway.app/graphql"
 };
 
 export type GraphQLErrorPayload = {
