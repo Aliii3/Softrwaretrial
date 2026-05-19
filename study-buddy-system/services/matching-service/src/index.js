@@ -7,15 +7,15 @@ import { connectProducer, connectConsumer } from "./config/kafka.js";
 import { handleKafkaMessage } from "./services/matchingService.js";
 
 try {
-  await connectProducer();
-  console.log("Kafka producer connected");
+  const connected = await connectProducer();
+  console.log(connected ? "Kafka producer connected" : "Kafka producer disabled");
 } catch {
   console.log("Kafka producer not available, skipping...");
 }
 
 try {
-  await connectConsumer(handleKafkaMessage);
-  console.log("Kafka consumer connected - listening for UserPreferencesUpdated, availability-events");
+  const connected = await connectConsumer(handleKafkaMessage);
+  console.log(connected ? "Kafka consumer connected - listening for UserPreferencesUpdated, availability-events" : "Kafka consumer disabled");
 } catch {
   console.log("Kafka consumer not available, skipping...");
 }

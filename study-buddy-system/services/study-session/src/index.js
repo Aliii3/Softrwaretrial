@@ -4,11 +4,10 @@ import { resolvers } from "./graphql/resolvers.js";
 import { getUserFromToken } from "./middleware/authMiddleware.js";
 import { connectProducer } from "./config/kafka.js";
 
-// ✅ PUT IT HERE (before server starts)
 try {
-  await connectProducer();
-  console.log("Kafka connected");
-} catch (err) {
+  const connected = await connectProducer();
+  console.log(connected ? "Kafka connected" : "Kafka disabled");
+} catch {
   console.log("Kafka not running, skipping...");
 }
 
