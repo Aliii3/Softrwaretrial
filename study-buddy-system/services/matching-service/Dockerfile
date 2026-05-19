@@ -13,8 +13,6 @@ RUN npm install
 # Copy rest of project
 COPY . .
 
-RUN npx prisma generate
-
 ENV PORT=4004
 
 EXPOSE 4004

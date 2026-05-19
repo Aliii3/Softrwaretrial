@@ -15,7 +15,7 @@ try {
 
 try {
   await connectConsumer(handleKafkaMessage);
-  console.log("Kafka consumer connected — listening for UserPreferencesUpdated, availability-events");
+  console.log("Kafka consumer connected - listening for UserPreferencesUpdated, availability-events");
 } catch {
   console.log("Kafka consumer not available, skipping...");
 }

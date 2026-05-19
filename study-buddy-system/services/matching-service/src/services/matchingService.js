@@ -1,29 +1,31 @@
-import prisma from "../config/db.js";
+import { randomUUID } from "node:crypto";
 import { sendEvent } from "../config/kafka.js";
 
-// ─── Scoring weights (total = 100) ───────────────────────────────────────────
 const WEIGHTS = {
-  sharedCourse: 20,   // up to 2 courses = 40 pts
-  sharedTopic: 10,    // up to 2 topics  = 20 pts
-  availability: 20,   // any overlap     = 20 pts
+  sharedCourse: 20,
+  sharedTopic: 10,
+  availability: 20,
   studyMode: 10,
   studyPace: 5,
   studyStyle: 5,
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const profilesByUserId = new Map();
+const availabilityByUserId = new Map();
+const matchesByPair = new Map();
 
-const overlap = (arr1 = [], arr2 = []) =>
-  arr1.filter((x) => arr2.includes(x));
+const now = () => new Date().toISOString();
+const pairKey = (userId, matchedUserId) => `${userId}:${matchedUserId}`;
+
+const overlap = (arr1 = [], arr2 = []) => arr1.filter((x) => arr2.includes(x));
+
+const sortSlots = (slots = []) =>
+  [...slots].sort((a, b) => a.dayOfWeek.localeCompare(b.dayOfWeek) || a.startTime.localeCompare(b.startTime));
 
 const hasAvailabilityOverlap = (slots1 = [], slots2 = []) => {
   for (const a of slots1) {
     for (const b of slots2) {
-      if (
-        a.dayOfWeek === b.dayOfWeek &&
-        a.startTime < b.endTime &&
-        b.startTime < a.endTime
-      ) {
+      if (a.dayOfWeek === b.dayOfWeek && a.startTime < b.endTime && b.startTime < a.endTime) {
         return true;
       }
     }
@@ -72,116 +74,113 @@ const computeScore = (profileA, profileB, slotsA, slotsB) => {
   return { score: Math.min(score, 100), reasons };
 };
 
-// ─── Kafka event handlers ─────────────────────────────────────────────────────
-
 export const handleKafkaMessage = async (topic, data) => {
   if (topic === "UserPreferencesUpdated") {
     const { userId, courses, topics, studyPace, studyMode, groupSize, studyStyle } = data.payload || data;
-    await prisma.userProfile.upsert({
-      where: { userId },
-      create: { userId, courses: courses || [], topics: topics || [], studyPace, studyMode, groupSize, studyStyle },
-      update: { courses: courses || [], topics: topics || [], studyPace, studyMode, groupSize, studyStyle },
-    });
-    console.log(`UserProfile cached for user ${userId}`);
+    await syncUserProfile(userId, courses, topics, studyPace, studyMode, groupSize, studyStyle);
+    console.log(`UserProfile cached in memory for user ${userId}`);
     await runMatchingForUser(userId);
   }
 
   if (topic === "availability-events") {
     const { userId, slots } = data.payload || data;
-    // Replace all slots for this user
-    await prisma.userAvailability.deleteMany({ where: { userId } });
-    if (slots && slots.length > 0) {
-      await prisma.userAvailability.createMany({
-        data: slots.map((s) => ({ userId, dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime })),
-      });
-    }
-    console.log(`Availability cached for user ${userId}`);
+    await syncUserAvailability(userId, slots || []);
+    console.log(`Availability cached in memory for user ${userId}`);
     await runMatchingForUser(userId);
   }
 };
 
-// ─── Core matching logic ──────────────────────────────────────────────────────
-
 export const runMatchingForUser = async (userId) => {
-  const profileA = await prisma.userProfile.findUnique({ where: { userId } });
+  const profileA = profilesByUserId.get(userId);
   if (!profileA) return [];
 
-  const [slotsA, otherProfiles] = await Promise.all([
-    prisma.userAvailability.findMany({ where: { userId }, orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] }),
-    prisma.userProfile.findMany({ where: { userId: { not: userId } }, orderBy: { userId: "asc" } }),
-  ]);
-
-  const otherUserIds = otherProfiles.map((profile) => profile.userId);
-  const allOtherSlots = otherUserIds.length
-    ? await prisma.userAvailability.findMany({
-        where: { userId: { in: otherUserIds } },
-        orderBy: [{ userId: "asc" }, { dayOfWeek: "asc" }, { startTime: "asc" }],
-      })
-    : [];
-  const slotsByUserId = allOtherSlots.reduce((map, slot) => {
-    if (!map.has(slot.userId)) map.set(slot.userId, []);
-    map.get(slot.userId).push(slot);
-    return map;
-  }, new Map());
+  const slotsA = availabilityByUserId.get(userId) || [];
+  const otherProfiles = [...profilesByUserId.values()]
+    .filter((profile) => profile.userId !== userId)
+    .sort((a, b) => a.userId.localeCompare(b.userId));
 
   const results = [];
 
   for (const profileB of otherProfiles) {
-    const slotsB = slotsByUserId.get(profileB.userId) || [];
+    const slotsB = availabilityByUserId.get(profileB.userId) || [];
     const { score, reasons } = computeScore(profileA, profileB, slotsA, slotsB);
+    const key = pairKey(userId, profileB.userId);
 
-    if (score > 0) {
-      const match = await prisma.match.upsert({
-        where: { userId_matchedUserId: { userId, matchedUserId: profileB.userId } },
-        create: { userId, matchedUserId: profileB.userId, score, reasons },
-        update: { score, reasons },
+    if (score <= 0) {
+      matchesByPair.delete(key);
+      continue;
+    }
+
+    const existing = matchesByPair.get(key);
+    const match = {
+      id: existing?.id || randomUUID(),
+      userId,
+      matchedUserId: profileB.userId,
+      score,
+      reasons,
+      status: existing?.status || "PENDING",
+      createdAt: existing?.createdAt || now(),
+      updatedAt: now(),
+    };
+
+    matchesByPair.set(key, match);
+    results.push(match);
+
+    try {
+      await sendEvent("MatchFound", {
+        event: "MatchFound",
+        timestamp: new Date().toISOString(),
+        producerService: "matching-service",
+        correlationId: match.id,
+        payload: { userId, matchedUserId: profileB.userId, score, reasons },
       });
-      results.push(match);
-
-      try {
-        await sendEvent("MatchFound", {
-          event: "MatchFound",
-          timestamp: new Date(),
-          producerService: "matching-service",
-          correlationId: match.id,
-          payload: { userId, matchedUserId: profileB.userId, score, reasons },
-        });
-      } catch {
-        console.log("Kafka not running, skipping MatchFound event...");
-      }
+    } catch {
+      console.log("Kafka not running, skipping MatchFound event...");
     }
   }
 
-  return results;
+  return results.sort((a, b) => b.score - a.score);
 };
 
-// ─── GraphQL-facing functions ─────────────────────────────────────────────────
-
 export const getRecommendedMatches = async (userId) => {
-  return prisma.match.findMany({
-    where: { userId },
-    orderBy: { score: "desc" },
-  });
+  return [...matchesByPair.values()]
+    .filter((match) => match.userId === userId)
+    .sort((a, b) => b.score - a.score);
 };
 
 export const getMatchById = async (id) => {
-  return prisma.match.findUnique({ where: { id } });
+  return [...matchesByPair.values()].find((match) => match.id === id) || null;
+};
+
+export const getUserProfile = async (userId) => {
+  return profilesByUserId.get(userId) || null;
 };
 
 export const syncUserProfile = async (userId, courses, topics, studyPace, studyMode, groupSize, studyStyle) => {
-  return prisma.userProfile.upsert({
-    where: { userId },
-    create: { userId, courses: courses || [], topics: topics || [], studyPace, studyMode, groupSize, studyStyle },
-    update: { courses: courses || [], topics: topics || [], studyPace, studyMode, groupSize, studyStyle },
-  });
+  const existing = profilesByUserId.get(userId);
+  const profile = {
+    id: existing?.id || randomUUID(),
+    userId,
+    courses: courses || [],
+    topics: topics || [],
+    studyPace,
+    studyMode,
+    groupSize,
+    studyStyle,
+  };
+
+  profilesByUserId.set(userId, profile);
+  return profile;
 };
 
 export const syncUserAvailability = async (userId, slots) => {
-  await prisma.userAvailability.deleteMany({ where: { userId } });
-  if (slots && slots.length > 0) {
-    await prisma.userAvailability.createMany({
-      data: slots.map((s) => ({ userId, dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime })),
-    });
-  }
-  return prisma.userAvailability.findMany({ where: { userId } });
+  const normalized = sortSlots(slots).map((slot) => ({
+    userId,
+    dayOfWeek: slot.dayOfWeek,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+  }));
+
+  availabilityByUserId.set(userId, normalized);
+  return normalized;
 };

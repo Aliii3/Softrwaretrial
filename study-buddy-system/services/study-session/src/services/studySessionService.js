@@ -1,15 +1,17 @@
-import prisma from "../config/db.js";
+import { randomUUID } from "node:crypto";
 import { sendEvent } from "../config/kafka.js";
 
 const VALID_SESSION_TYPES = ["ONLINE", "IN_PERSON"];
 const ACTIVE_STATUSES = ["SCHEDULED", "UPDATED"];
-const includeParticipants = { participants: true };
+const sessionsById = new Map();
+
+const now = () => new Date().toISOString();
 
 const publishSessionEvent = async (eventName, session) => {
   try {
     await sendEvent(eventName, {
       eventName,
-      timestamp: new Date().toISOString(),
+      timestamp: now(),
       producer: "study-session-service",
       correlationId: session.id,
       payload: {
@@ -45,12 +47,17 @@ const normalizeDateRange = (startTime, endTime) => {
   const end = new Date(endTime);
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) throw new Error("Session start and end time must be valid dates");
   if (end <= start) throw new Error("Session end time must be after start time");
-  return { start, end, durationMinutes: Math.round((end.getTime() - start.getTime()) / 60000) };
+  return { start: start.toISOString(), end: end.toISOString(), durationMinutes: Math.round((end.getTime() - start.getTime()) / 60000) };
 };
 
 const assertActiveSession = (session) => {
   if (!session) throw new Error("Study session not found");
   if (!ACTIVE_STATUSES.includes(session.status)) throw new Error("Study session is not active");
+};
+
+const saveSession = (session) => {
+  sessionsById.set(session.id, { ...session, updatedAt: now() });
+  return sessionsById.get(session.id);
 };
 
 export const createStudySession = async (data) => {
@@ -59,37 +66,40 @@ export const createStudySession = async (data) => {
   if (!creatorId) throw new Error("Session creator is required");
   if (!data.creatorContact) throw new Error("Session creator contact info is required");
 
-  const session = await prisma.studySession.create({
-    data: {
-      title: data.title,
-      description: data.description,
-      topic: data.topic || data.subject,
-      startTime: start,
-      endTime: end,
-      durationMinutes,
-      sessionType: normalizeSessionType(data.sessionType),
-      status: "SCHEDULED",
-      creatorId,
-      receiverId: data.receiverId || null,
-      creatorContact: data.creatorContact,
-      receiverContact: data.receiverContact || null,
-      userId: creatorId,
-      subject: data.subject,
-      participants: { create: [{ userId: creatorId, contactInfo: data.creatorContact }] },
-    },
-    include: includeParticipants,
-  });
+  const createdAt = now();
+  const session = {
+    id: randomUUID(),
+    title: data.title,
+    description: data.description || null,
+    topic: data.topic || data.subject,
+    startTime: start,
+    endTime: end,
+    durationMinutes,
+    sessionType: normalizeSessionType(data.sessionType),
+    status: "SCHEDULED",
+    creatorId,
+    receiverId: data.receiverId || null,
+    creatorContact: data.creatorContact,
+    receiverContact: data.receiverContact || null,
+    userId: creatorId,
+    subject: data.subject,
+    participants: [{ id: randomUUID(), sessionId: "", userId: creatorId, contactInfo: data.creatorContact, joinedAt: createdAt }],
+    createdAt,
+    updatedAt: createdAt,
+  };
+  session.participants[0].sessionId = session.id;
 
+  sessionsById.set(session.id, session);
   await publishSessionEvent("StudySessionCreated", session);
   return session;
 };
 
 export const getStudySessions = async () => {
-  return prisma.studySession.findMany({ orderBy: { startTime: "asc" }, include: includeParticipants });
+  return [...sessionsById.values()].sort((a, b) => a.startTime.localeCompare(b.startTime));
 };
 
 export const getStudySessionById = async (id) => {
-  return prisma.studySession.findUnique({ where: { id }, include: includeParticipants });
+  return sessionsById.get(id) || null;
 };
 
 export const updateStudySession = async (id, updates) => {
@@ -97,23 +107,20 @@ export const updateStudySession = async (id, updates) => {
   assertActiveSession(existing);
   const range = updates.startTime || updates.endTime ? normalizeDateRange(updates.startTime || existing.startTime, updates.endTime || existing.endTime) : null;
 
-  const updated = await prisma.studySession.update({
-    where: { id },
-    data: {
-      title: updates.title ?? undefined,
-      description: updates.description ?? undefined,
-      topic: updates.topic ?? undefined,
-      subject: updates.subject ?? undefined,
-      startTime: range?.start,
-      endTime: range?.end,
-      durationMinutes: range?.durationMinutes,
-      sessionType: updates.sessionType ? normalizeSessionType(updates.sessionType) : undefined,
-      receiverId: updates.receiverId ?? undefined,
-      creatorContact: updates.creatorContact ?? undefined,
-      receiverContact: updates.receiverContact ?? undefined,
-      status: "UPDATED",
-    },
-    include: includeParticipants,
+  const updated = saveSession({
+    ...existing,
+    title: updates.title ?? existing.title,
+    description: updates.description ?? existing.description,
+    topic: updates.topic ?? existing.topic,
+    subject: updates.subject ?? existing.subject,
+    startTime: range?.start ?? existing.startTime,
+    endTime: range?.end ?? existing.endTime,
+    durationMinutes: range?.durationMinutes ?? existing.durationMinutes,
+    sessionType: updates.sessionType ? normalizeSessionType(updates.sessionType) : existing.sessionType,
+    receiverId: updates.receiverId ?? existing.receiverId,
+    creatorContact: updates.creatorContact ?? existing.creatorContact,
+    receiverContact: updates.receiverContact ?? existing.receiverContact,
+    status: "UPDATED",
   });
 
   await publishSessionEvent("StudySessionUpdated", updated);
@@ -125,20 +132,21 @@ export const joinStudySession = async (id, userId, contactInfo) => {
   assertActiveSession(session);
   if (!userId) throw new Error("Participant user id is required");
 
-  await prisma.studySessionParticipant.upsert({
-    where: { sessionId_userId: { sessionId: id, userId } },
-    create: { sessionId: id, userId, contactInfo },
-    update: { contactInfo },
-  });
+  const participants = [...session.participants];
+  const existingParticipant = participants.find((participant) => participant.userId === userId);
 
-  const updated = await prisma.studySession.update({
-    where: { id },
-    data: {
-      receiverId: session.receiverId || (userId !== session.creatorId ? userId : session.receiverId),
-      receiverContact: session.receiverContact || (userId !== session.creatorId ? contactInfo : session.receiverContact),
-      status: "UPDATED",
-    },
-    include: includeParticipants,
+  if (existingParticipant) {
+    existingParticipant.contactInfo = contactInfo;
+  } else {
+    participants.push({ id: randomUUID(), sessionId: id, userId, contactInfo, joinedAt: now() });
+  }
+
+  const updated = saveSession({
+    ...session,
+    participants,
+    receiverId: session.receiverId || (userId !== session.creatorId ? userId : session.receiverId),
+    receiverContact: session.receiverContact || (userId !== session.creatorId ? contactInfo : session.receiverContact),
+    status: "UPDATED",
   });
 
   await publishSessionEvent("StudySessionJoined", updated);
@@ -150,16 +158,15 @@ export const leaveStudySession = async (id, userId) => {
   assertActiveSession(session);
   if (userId === session.creatorId) throw new Error("Creator cannot leave their own session. Cancel it instead.");
 
-  await prisma.studySessionParticipant.delete({ where: { sessionId_userId: { sessionId: id, userId } } });
+  const participants = session.participants.filter((participant) => participant.userId !== userId);
+  if (participants.length === session.participants.length) throw new Error("Participant is not in this session");
 
-  const updated = await prisma.studySession.update({
-    where: { id },
-    data: {
-      receiverId: session.receiverId === userId ? null : session.receiverId,
-      receiverContact: session.receiverId === userId ? null : session.receiverContact,
-      status: "UPDATED",
-    },
-    include: includeParticipants,
+  const updated = saveSession({
+    ...session,
+    participants,
+    receiverId: session.receiverId === userId ? null : session.receiverId,
+    receiverContact: session.receiverId === userId ? null : session.receiverContact,
+    status: "UPDATED",
   });
 
   await publishSessionEvent("StudySessionLeft", updated);
@@ -169,12 +176,13 @@ export const leaveStudySession = async (id, userId) => {
 export const cancelStudySession = async (id) => {
   const session = await getStudySessionById(id);
   assertActiveSession(session);
-  const updated = await prisma.studySession.update({ where: { id }, data: { status: "CANCELLED" }, include: includeParticipants });
+  const updated = saveSession({ ...session, status: "CANCELLED" });
   await publishSessionEvent("StudySessionCancelled", updated);
   return updated;
 };
 
 export const deleteStudySession = async (id) => {
-  await cancelStudySession(id);
+  const session = await cancelStudySession(id);
+  sessionsById.delete(session.id);
   return true;
 };

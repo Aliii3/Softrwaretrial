@@ -1,11 +1,11 @@
 import {
   getRecommendedMatches,
   getMatchById,
+  getUserProfile,
   syncUserProfile,
   syncUserAvailability,
   runMatchingForUser,
 } from "../services/matchingService.js";
-import prisma from "../config/db.js";
 
 export const resolvers = {
   Query: {
@@ -21,7 +21,7 @@ export const resolvers = {
 
     getUserProfile: async (_, { userId }, { user }) => {
       if (!user) throw new Error("Not authenticated");
-      return await prisma.userProfile.findUnique({ where: { userId } });
+      return await getUserProfile(userId);
     },
   },
 

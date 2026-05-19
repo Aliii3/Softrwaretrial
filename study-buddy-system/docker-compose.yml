@@ -63,10 +63,9 @@ services:
     
     environment:
       PORT: 4002
-      DATABASE_URL: ${STUDY_SESSION_DATABASE_URL:?Set STUDY_SESSION_DATABASE_URL}
       KAFKA_BROKER: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
-    command: sh -c "npx prisma migrate deploy && node src/index.js"
+    command: node src/index.js
   
   notification-service:
     build: ./services/notification-service
@@ -94,7 +93,6 @@ services:
     environment:
       PORT: 4004
       KAFKA_BROKER: kafka:9092
-      DATABASE_URL: ${MATCHING_DATABASE_URL:?Set MATCHING_DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
   profile-service:
     build: ./services/profile-preferences-service
