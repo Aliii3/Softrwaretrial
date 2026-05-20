@@ -1,3 +1,5 @@
+import { ApolloClient, HttpLink, InMemoryCache, gql } from "@apollo/client";
+import type { DocumentNode, OperationDefinitionNode } from "graphql";
 import type { ServiceKey } from "@/types/domain";
 
 const endpoints: Record<ServiceKey, string> = {
@@ -9,14 +11,32 @@ const endpoints: Record<ServiceKey, string> = {
   profile: process.env.NEXT_PUBLIC_PROFILE_API || "https://profile-production-14b5.up.railway.app/graphql"
 };
 
-export type GraphQLErrorPayload = {
-  message: string;
-};
+const clients = new Map<ServiceKey, ApolloClient>();
 
-type GraphQLResponse<T> = {
-  data?: T;
-  errors?: GraphQLErrorPayload[];
-};
+function getClient(service: ServiceKey) {
+  const existing = clients.get(service);
+  if (existing) return existing;
+
+  const client = new ApolloClient({
+    link: new HttpLink({ uri: endpoints[service] }),
+    cache: new InMemoryCache(),
+    defaultOptions: {
+      query: { fetchPolicy: "no-cache", errorPolicy: "none" },
+      mutate: { fetchPolicy: "no-cache", errorPolicy: "none" }
+    }
+  });
+
+  clients.set(service, client);
+  return client;
+}
+
+function getOperationType(document: DocumentNode) {
+  const operation = document.definitions.find(
+    (definition): definition is OperationDefinitionNode => definition.kind === "OperationDefinition"
+  );
+
+  return operation?.operation || "query";
+}
 
 export async function graphQL<T>(
   service: ServiceKey,
@@ -24,24 +44,22 @@ export async function graphQL<T>(
   variables?: Record<string, unknown>,
   token?: string | null
 ): Promise<T> {
-  const response = await fetch(endpoints[service], {
-    method: "POST",
+  const client = getClient(service);
+  const document = gql(query);
+  const context = {
     headers: {
-      "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: JSON.stringify({ query, variables })
-  });
+    }
+  };
 
-  const payload = (await response.json()) as GraphQLResponse<T>;
+  const result =
+    getOperationType(document) === "mutation"
+      ? await client.mutate<T>({ mutation: document, variables, context })
+      : await client.query<T>({ query: document, variables, context });
 
-  if (!response.ok || payload.errors?.length) {
-    throw new Error(payload.errors?.map((error) => error.message).join(", ") || "GraphQL request failed");
-  }
-
-  if (!payload.data) {
+  if (!result.data) {
     throw new Error("GraphQL response did not include data");
   }
 
-  return payload.data;
+  return result.data;
 }
