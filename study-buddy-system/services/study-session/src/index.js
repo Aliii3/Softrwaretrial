@@ -1,8 +1,16 @@
+import "dotenv/config";
 import { ApolloServer } from "apollo-server";
 import { typeDefs } from "./graphql/schema.js";
 import { resolvers } from "./graphql/resolvers.js";
 import { getUserFromToken } from "./middleware/authMiddleware.js";
 import { connectProducer } from "./config/kafka.js";
+
+try {
+  const connected = await connectProducer();
+  console.log(connected ? "Kafka connected" : "Kafka disabled");
+} catch {
+  console.log("Kafka not available, skipping...");
+}
 
 const server = new ApolloServer({
   typeDefs,
@@ -18,12 +26,4 @@ const port = parseInt(process.env.PORT || "4002", 10);
 
 server.listen({ port, host: "0.0.0.0" }).then(({ url }) => {
   console.log(`Study Session Server ready at ${url}`);
-
-  connectProducer()
-    .then((connected) => {
-      console.log(connected ? "Kafka connected" : "Kafka disabled");
-    })
-    .catch(() => {
-      console.log("Kafka not running, skipping...");
-    });
 });
