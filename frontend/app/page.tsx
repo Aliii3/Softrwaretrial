@@ -482,7 +482,11 @@ function SessionsView({
     creatorContact: user.email
   });
 
-  const mySessions = sessions.filter((s) => s.creatorId === user.id || s.userId === user.id);
+  const mySessions = sessions.filter((s) => {
+    const match = s.creatorId === user.id || s.userId === user.id;
+    if (!match) console.log("[session filter] EXCLUDED — creatorId:", s.creatorId, "userId:", s.userId, "user.id:", user.id);
+    return match;
+  });
 
   async function createSession(event: React.FormEvent) {
     event.preventDefault();
@@ -492,17 +496,30 @@ function SessionsView({
       return;
     }
     setSaving(true);
+    const variables = { ...form, startTime: new Date(form.startTime).toISOString(), endTime: new Date(form.endTime).toISOString(), userId: user.id };
+    console.log("[session] sending variables:", variables);
+    console.log("[session] logged-in user.id:", user.id);
     try {
       const payload = await graphQL<{ createStudySession: StudySession }>(
         "session",
         operations.createStudySession,
-        { ...form, startTime: new Date(form.startTime).toISOString(), endTime: new Date(form.endTime).toISOString(), userId: user.id },
+        variables,
         token
       );
-      setState((current) => ({ ...current, sessions: [payload.createStudySession, ...current.sessions] }));
+      const created = payload.createStudySession;
+      console.log("[session] server response:", created);
+      console.log("[session] creatorId match user.id?", created.creatorId === user.id, "| creatorId:", created.creatorId, "| user.id:", user.id);
+      console.log("[session] userId match user.id?", created.userId === user.id, "| userId:", created.userId);
+      console.log("[session] will appear in list?", created.creatorId === user.id || created.userId === user.id);
+      setState((current) => {
+        const updated = [created, ...current.sessions];
+        console.log("[session] sessions after setState:", updated.length, "total,", updated.filter(s => s.creatorId === user.id || s.userId === user.id).length, "mine");
+        return { ...current, sessions: updated };
+      });
       setForm({ title: "", subject: "", topic: "", description: "", startTime: "", endTime: "", sessionType: "ONLINE", creatorContact: user.email });
       setStatus("Study session created.");
     } catch (error) {
+      console.error("[session] createStudySession error:", error);
       setStatus(getErrorMessage(error, "Could not create session."));
     } finally {
       setSaving(false);
@@ -654,6 +671,9 @@ function ProfileView({
   );
 }
 
+
+
+
 function AvailabilityView({
   token,
   slots,
@@ -686,12 +706,7 @@ function AvailabilityView({
         const payload = await graphQL<{ updateSlot: AvailabilitySlot }>(
           "availability",
           operations.updateSlot,
-          {
-            id: editingId,
-            dayOfWeek: form.dayOfWeek,
-            startTime: form.startTime,
-            endTime: form.endTime
-          },
+          { id: editingId, dayOfWeek: form.dayOfWeek, startTime: form.startTime, endTime: form.endTime },
           token
         );
         setState((current) => ({
@@ -705,11 +720,7 @@ function AvailabilityView({
         const payload = await graphQL<{ createSlot: AvailabilitySlot }>(
           "availability",
           operations.createSlot,
-          {
-            dayOfWeek: form.dayOfWeek,
-            startTime: form.startTime,
-            endTime: form.endTime
-          },
+          { dayOfWeek: form.dayOfWeek, startTime: form.startTime, endTime: form.endTime },
           token
         );
         setState((current) => ({ ...current, availability: [payload.createSlot, ...current.availability] }));
