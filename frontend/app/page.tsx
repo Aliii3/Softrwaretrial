@@ -106,8 +106,9 @@ export default function Home() {
           "session",
           operations.getStudySessions,
           undefined,
-          authToken
+           authToken
         ).catch(() => ({ getStudySessions: [] })),
+        
         graphQL<{ getAvailability: AvailabilitySlot[] }>(
           "availability",
           operations.getAvailability,
@@ -469,6 +470,7 @@ function SessionsView({
   setStatus: (status: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     subject: "",
@@ -480,9 +482,11 @@ function SessionsView({
     creatorContact: user.email
   });
 
+  const mySessions = sessions.filter((s) => s.creatorId === user.id || s.userId === user.id);
+
   async function createSession(event: React.FormEvent) {
     event.preventDefault();
-    const conflict = getSessionConflict(form, sessions);
+    const conflict = getSessionConflict(form, mySessions);
     if (conflict) {
       setStatus(conflict);
       return;
@@ -505,12 +509,37 @@ function SessionsView({
     }
   }
 
+  async function cancelSession(sessionId: string) {
+    setCancelingId(sessionId);
+    try {
+      await graphQL<{ cancelStudySession: { id: string; status: string } }>(
+        "session",
+        operations.cancelStudySession,
+        { id: sessionId },
+        token
+      );
+      setState((current) => ({
+        ...current,
+        sessions: current.sessions.map((s) => s.id === sessionId ? { ...s, status: "CANCELLED" } : s)
+      }));
+      setStatus("Session cancelled.");
+    } catch (error) {
+      setStatus(getErrorMessage(error, "Could not cancel session."));
+    } finally {
+      setCancelingId(null);
+    }
+  }
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Study Sessions</h1>
-          <p className="muted">Create and review the sessions managed by the study-session service.</p>
+          <p className="muted">
+            {mySessions.length === 0
+              ? "No sessions yet. Create your first study session below."
+              : `You have ${mySessions.length} session${mySessions.length !== 1 ? "s" : ""}.`}
+          </p>
         </div>
       </div>
       <div className="dashboard-grid grid">
@@ -541,10 +570,15 @@ function SessionsView({
           </button>
         </form>
         <section className="stack">
-          {sessions.map((session) => (
-            <SessionCard key={session.id} session={session} />
+          {mySessions.map((session) => (
+            <SessionCard
+              key={session.id}
+              session={session}
+              onCancel={["SCHEDULED", "UPDATED"].includes(session.status) ? () => cancelSession(session.id) : undefined}
+              canceling={cancelingId === session.id}
+            />
           ))}
-          {!sessions.length && <EmptyCard text="No study sessions returned yet." />}
+          {!mySessions.length && <EmptyCard text="No sessions yet. Fill in the form to create your first study session." />}
         </section>
       </div>
     </>
@@ -857,21 +891,59 @@ function SettingsView({ status, apiOnline }: { status: string; apiOnline: boolea
   );
 }
 
-function SessionCard({ session }: { session: StudySession }) {
+function SessionCard({
+  session,
+  onCancel,
+  canceling
+}: {
+  session: StudySession;
+  onCancel?: () => void;
+  canceling?: boolean;
+}) {
+  const statusColor =
+    session.status === "SCHEDULED" ? "teal"
+    : session.status === "UPDATED" ? "amber"
+    : "";
+
   return (
-    <article className="card compact">
+    <article className="card compact stack">
       <div className="between">
-        <div>
-          <div className="cluster">
-            <span className="badge">{session.subject}</span>
-            <span className="badge teal">{session.sessionType === "IN_PERSON" ? "In person" : "Online"}</span>
-            <span className="badge">{session.status}</span>
-            <span className="badge amber">{formatDay(session.startTime)}</span>
-          </div>
-          <h3 style={{ marginTop: 12 }}>{session.title}</h3>
-          <p className="muted">{session.topic} • {session.durationMinutes} min • {session.description || "Study plan details can be added later."}</p>
+        <div className="cluster">
+          <span className="badge">{session.subject}</span>
+          <span className={`badge ${statusColor}`}>{session.status}</span>
+          <span className="badge teal">{session.sessionType === "IN_PERSON" ? "In person" : "Online"}</span>
+          <span className="badge amber">{formatDay(session.startTime)}</span>
         </div>
-        <div className="score">{formatTimeRange(session.startTime, session.endTime)}</div>
+        {onCancel && (
+          <button
+            className="button ghost"
+            disabled={canceling}
+            onClick={onCancel}
+            type="button"
+            style={{ flexShrink: 0 }}
+          >
+            {canceling ? <RefreshCw className="spin" size={14} /> : <Trash2 size={14} />}
+            {canceling ? "Cancelling…" : "Cancel"}
+          </button>
+        )}
+      </div>
+      <div>
+        <h3 style={{ marginTop: 4, marginBottom: 4 }}>{session.title}</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          {session.topic} · {session.durationMinutes} min · {formatTimeRange(session.startTime, session.endTime)}
+        </p>
+        {session.description && (
+          <p className="muted" style={{ margin: "6px 0 0" }}>{session.description}</p>
+        )}
+      </div>
+      <div className="cluster">
+        <span className="muted" style={{ fontSize: 13 }}>
+          <Users size={13} style={{ display: "inline", marginRight: 4 }} />
+          {session.participants.length} participant{session.participants.length !== 1 ? "s" : ""}
+        </span>
+        <span className="muted" style={{ fontSize: 13 }}>
+          {session.creatorContact}
+        </span>
       </div>
     </article>
   );

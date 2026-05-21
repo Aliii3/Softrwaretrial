@@ -117,6 +117,11 @@ export const operations = {
   deleteSlot: `mutation DeleteSlot($id: ID!) {
     deleteSlot(id: $id) { id userId dayOfWeek startTime endTime }
   }`,
+  cancelStudySession: `mutation CancelStudySession($id: ID!) {
+    cancelStudySession(id: $id) {
+      id status updatedAt
+    }
+  }`,
   markAllNotificationsAsRead: `mutation MarkAll($userId: String!) { markAllNotificationsAsRead(userId: $userId) }`,
   computeMatches: `mutation ComputeMatches($userId: String!) {
     computeMatches(userId: $userId) { id userId matchedUserId score reasons status createdAt updatedAt }
