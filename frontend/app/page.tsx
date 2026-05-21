@@ -22,7 +22,7 @@ import {
   Users
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { graphQL } from "@/lib/graphql";
+import { graphQL, operations } from "@/lib/graphql";
 import { formatDay, formatTimeRange, scorePercent } from "@/lib/format";
 import type { AvailabilitySlot, Match, NotificationItem, Profile, StudySession, User } from "@/types/domain";
 
@@ -90,7 +90,7 @@ export default function Home() {
     try {
       const me = await graphQL<{ getMe: User }>(
         "user",
-        `query GetMe { getMe { id name email university academicYear phone } }`,
+        operations.getMe,
         undefined,
         authToken
       );
@@ -98,28 +98,19 @@ export default function Home() {
       const [profilePayload, sessionsPayload, availabilityPayload] = await Promise.all([
         graphQL<{ getProfile: Profile | null }>(
           "profile",
-          `query GetProfile {
-            getProfile { userId courses topics studyPace studyMode groupSize studyStyle }
-          }`,
+          operations.getProfile,
           undefined,
           authToken
         ).catch(() => ({ getProfile: null })),
         graphQL<{ getStudySessions: StudySession[] }>(
           "session",
-          `query GetStudySessions {
-            getStudySessions {
-              id title description topic startTime endTime durationMinutes sessionType status creatorId receiverId creatorContact receiverContact userId subject createdAt updatedAt
-              participants { id sessionId userId contactInfo joinedAt }
-            }
-          }`,
+          operations.getStudySessions,
           undefined,
           authToken
         ).catch(() => ({ getStudySessions: [] })),
         graphQL<{ getAvailability: AvailabilitySlot[] }>(
           "availability",
-          `query GetAvailability {
-            getAvailability { id userId dayOfWeek startTime endTime }
-          }`,
+          operations.getAvailability,
           undefined,
           authToken
         ).catch(() => ({ getAvailability: [] }))
@@ -129,17 +120,13 @@ export default function Home() {
       const [matchesPayload, notificationsPayload] = await Promise.all([
         graphQL<{ getRecommendedMatches: Match[] }>(
           "matching",
-          `query GetRecommendedMatches($userId: String!) {
-            getRecommendedMatches(userId: $userId) { id userId matchedUserId score reasons status createdAt updatedAt }
-          }`,
+          operations.getRecommendedMatches,
           { userId: user.id },
           authToken
         ).catch(() => ({ getRecommendedMatches: [] })),
         graphQL<{ getNotifications: NotificationItem[] }>(
           "notification",
-          `query GetNotifications($userId: String!) {
-            getNotifications(userId: $userId) { id userId type message isRead metadata createdAt }
-          }`,
+          operations.getNotifications,
           { userId: user.id },
           authToken
         ).catch(() => ({ getNotifications: [] }))
@@ -235,23 +222,14 @@ function AuthScreen({
       if (mode === "register") {
         await graphQL<{ register: User }>(
           "user",
-          `mutation Register($name: String!, $email: String!, $password: String!, $university: String!, $academicYear: Int!, $phone: String) {
-            register(name: $name, email: $email, password: $password, university: $university, academicYear: $academicYear, phone: $phone) {
-              id name email university academicYear phone
-            }
-          }`,
+          operations.register,
           form
         );
       }
 
       const login = await graphQL<{ login: { token: string; user: User } }>(
         "user",
-        `mutation Login($email: String!, $password: String!) {
-          login(email: $email, password: $password) {
-            token
-            user { id name email university academicYear phone }
-          }
-        }`,
+        operations.login,
         { email: form.email, password: form.password }
       );
       window.localStorage.setItem("studyBuddyToken", login.login.token);
@@ -513,32 +491,7 @@ function SessionsView({
     try {
       const payload = await graphQL<{ createStudySession: StudySession }>(
         "session",
-        `mutation CreateStudySession(
-          $title: String!
-          $description: String!
-          $topic: String!
-          $startTime: String!
-          $endTime: String!
-          $userId: String!
-          $subject: String!
-          $sessionType: String!
-          $creatorContact: String!
-        ) {
-          createStudySession(
-            title: $title
-            description: $description
-            topic: $topic
-            startTime: $startTime
-            endTime: $endTime
-            userId: $userId
-            subject: $subject
-            sessionType: $sessionType
-            creatorContact: $creatorContact
-          ) {
-            id title description topic startTime endTime durationMinutes sessionType status creatorId receiverId creatorContact receiverContact userId subject createdAt updatedAt
-            participants { id sessionId userId contactInfo joinedAt }
-          }
-        }`,
+        operations.createStudySession,
         { ...form, startTime: new Date(form.startTime).toISOString(), endTime: new Date(form.endTime).toISOString(), userId: user.id },
         token
       );
@@ -628,11 +581,7 @@ function ProfileView({
     try {
       const payload = await graphQL<{ updateProfile: Profile }>(
         "profile",
-        `mutation UpdateProfile($courses: [String], $topics: [String], $studyPace: String, $studyMode: String, $groupSize: Int, $studyStyle: String) {
-          updateProfile(courses: $courses, topics: $topics, studyPace: $studyPace, studyMode: $studyMode, groupSize: $groupSize, studyStyle: $studyStyle) {
-            userId courses topics studyPace studyMode groupSize studyStyle
-          }
-        }`,
+        operations.updateProfile,
         variables,
         token
       );
@@ -702,9 +651,7 @@ function AvailabilityView({
       if (editingId) {
         const payload = await graphQL<{ updateSlot: AvailabilitySlot }>(
           "availability",
-          `mutation UpdateSlot($id: ID!, $dayOfWeek: String, $startTime: String, $endTime: String) {
-            updateSlot(id: $id, dayOfWeek: $dayOfWeek, startTime: $startTime, endTime: $endTime) { id userId dayOfWeek startTime endTime }
-          }`,
+          operations.updateSlot,
           {
             id: editingId,
             dayOfWeek: form.dayOfWeek,
@@ -723,9 +670,7 @@ function AvailabilityView({
       } else {
         const payload = await graphQL<{ createSlot: AvailabilitySlot }>(
           "availability",
-          `mutation CreateSlot($dayOfWeek: String!, $startTime: String!, $endTime: String!) {
-            createSlot(dayOfWeek: $dayOfWeek, startTime: $startTime, endTime: $endTime) { id userId dayOfWeek startTime endTime }
-          }`,
+          operations.createSlot,
           {
             dayOfWeek: form.dayOfWeek,
             startTime: form.startTime,
@@ -753,9 +698,7 @@ function AvailabilityView({
     try {
       await graphQL<{ deleteSlot: AvailabilitySlot }>(
         "availability",
-        `mutation DeleteSlot($id: ID!) {
-          deleteSlot(id: $id) { id userId dayOfWeek startTime endTime }
-        }`,
+        operations.deleteSlot,
         { id: slotId },
         token
       );
@@ -855,7 +798,7 @@ function NotificationsView({
     try {
       await graphQL<{ markAllNotificationsAsRead: boolean }>(
         "notification",
-        `mutation MarkAll($userId: String!) { markAllNotificationsAsRead(userId: $userId) }`,
+        operations.markAllNotificationsAsRead,
         { userId: user.id },
         token
       );
@@ -1120,9 +1063,7 @@ async function computeMatches(
   try {
     const payload = await graphQL<{ computeMatches: Match[] }>(
       "matching",
-      `mutation ComputeMatches($userId: String!) {
-        computeMatches(userId: $userId) { id userId matchedUserId score reasons status createdAt updatedAt }
-      }`,
+      operations.computeMatches,
       { userId: state.user.id },
       token
     );
