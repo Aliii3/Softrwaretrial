@@ -60,12 +60,12 @@ services:
       - kafka
     ports:
       - "4002:4002"
-    
     environment:
       PORT: 4002
+      DATABASE_URL: ${SESSION_DATABASE_URL:?Set SESSION_DATABASE_URL}
       KAFKA_BROKER: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
-    command: node src/index.js
+    command: sh -c "npx prisma migrate deploy && node src/index.js"
   
   notification-service:
     build: ./services/notification-service

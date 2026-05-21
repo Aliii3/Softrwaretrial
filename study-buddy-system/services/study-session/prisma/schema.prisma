@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model StudySession {
+  id              String                   @id @default(uuid())
+  title           String
+  description     String?
+  topic           String
+  startTime       String
+  endTime         String
+  durationMinutes Int
+  sessionType     String
+  status          String                   @default("SCHEDULED")
+  creatorId       String
+  receiverId      String?
+  creatorContact  String
+  receiverContact String?
+  userId          String
+  subject         String
+  participants    StudySessionParticipant[]
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+}
+
+model StudySessionParticipant {
+  id          String       @id @default(uuid())
+  sessionId   String
+  userId      String
+  contactInfo String?
+  joinedAt    String
+  session     StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
