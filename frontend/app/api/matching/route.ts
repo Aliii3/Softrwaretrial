@@ -1,4 +1,5 @@
 import { createYoga, createSchema } from "graphql-yoga";
+import { GraphQLError } from "graphql";
 import jwt from "jsonwebtoken";
 import { randomUUID } from "crypto";
 
@@ -192,17 +193,20 @@ const typeDefs = /* GraphQL */ `
 const resolvers = {
   Query: {
     getRecommendedMatches: (_: unknown, { userId }: { userId: string }, { user }: any) => {
-      if (!user) throw new Error("Not authenticated");
-      return [...matchesByPair.values()]
+      console.log("[matching route] getRecommendedMatches — userId:", userId, "| auth:", !!user, "| profiles in store:", profilesByUserId.size, "| matches in store:", matchesByPair.size);
+      if (!user) throw new GraphQLError("Not authenticated");
+      const results = [...matchesByPair.values()]
         .filter((m) => m.userId === userId)
         .sort((a, b) => b.score - a.score);
+      console.log("[matching route] returning", results.length, "matches for", userId);
+      return results;
     },
     getMatch: (_: unknown, { id }: { id: string }, { user }: any) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!user) throw new GraphQLError("Not authenticated");
       return [...matchesByPair.values()].find((m) => m.id === id) || null;
     },
     getUserProfile: (_: unknown, { userId }: { userId: string }, { user }: any) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!user) throw new GraphQLError("Not authenticated");
       return profilesByUserId.get(userId) || null;
     },
   },
@@ -212,7 +216,7 @@ const resolvers = {
       { userId, courses, topics, studyPace, studyMode, groupSize, studyStyle }: any,
       { user }: any
     ) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!user) throw new GraphQLError("Not authenticated");
       const existing = profilesByUserId.get(userId);
       const profile: UserProfile = {
         id: existing?.id || randomUUID(),
@@ -225,11 +229,12 @@ const resolvers = {
         studyStyle,
       };
       profilesByUserId.set(userId, profile);
+      console.log("[matching route] syncUserProfile — stored profile for", userId, "| total profiles:", profilesByUserId.size);
       return profile;
     },
 
     syncUserAvailability: (_: unknown, { userId, slots }: any, { user }: any) => {
-      if (!user) throw new Error("Not authenticated");
+      if (!user) throw new GraphQLError("Not authenticated");
       const normalized: AvailabilitySlot[] = [...slots]
         .sort(
           (a: any, b: any) =>
@@ -237,12 +242,16 @@ const resolvers = {
         )
         .map((slot: any) => ({ userId, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, endTime: slot.endTime }));
       availabilityByUserId.set(userId, normalized);
+      console.log("[matching route] syncUserAvailability — stored", normalized.length, "slots for", userId);
       return normalized;
     },
 
     computeMatches: (_: unknown, { userId }: { userId: string }, { user }: any) => {
-      if (!user) throw new Error("Not authenticated");
-      return runMatchingForUser(userId);
+      console.log("[matching route] computeMatches — userId:", userId, "| auth:", !!user, "| profiles in store:", profilesByUserId.size);
+      if (!user) throw new GraphQLError("Not authenticated");
+      const results = runMatchingForUser(userId);
+      console.log("[matching route] computeMatches result:", results.length, "matches");
+      return results;
     },
   },
 };
@@ -250,6 +259,7 @@ const resolvers = {
 const { handleRequest } = createYoga({
   schema: createSchema({ typeDefs, resolvers }),
   graphqlEndpoint: "/api/matching",
+  maskedErrors: false,
   context: async ({ request }) => {
     const authHeader = request.headers.get("Authorization");
     const token = authHeader?.replace("Bearer ", "");
@@ -257,9 +267,12 @@ const { handleRequest } = createYoga({
     if (token) {
       try {
         user = jwt.verify(token, process.env.JWT_SECRET || "");
-      } catch {
-        // invalid token — user stays null
+        console.log("[matching route] JWT verified OK — user:", (user as any)?.userId);
+      } catch (err) {
+        console.error("[matching route] JWT verification FAILED:", (err as Error).message, "| JWT_SECRET set:", !!process.env.JWT_SECRET);
       }
+    } else {
+      console.warn("[matching route] No Authorization header received");
     }
     return { user };
   },

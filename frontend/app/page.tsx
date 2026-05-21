@@ -113,18 +113,26 @@ export default function Home() {
           "availability",
           operations.getAvailability,
           undefined,
+          
           authToken
         ).catch(() => ({ getAvailability: [] }))
       ]);
 
       const user = me.getMe || fallbackUser;
+      console.log("[matching] loadAppData — user.id:", user.id, "| token present:", !!authToken);
       const [matchesPayload, notificationsPayload] = await Promise.all([
         graphQL<{ getRecommendedMatches: Match[] }>(
           "matching",
           operations.getRecommendedMatches,
           { userId: user.id },
           authToken
-        ).catch(() => ({ getRecommendedMatches: [] })),
+        ).then((r) => {
+          console.log("[matching] getRecommendedMatches response:", r.getRecommendedMatches.length, "matches", r.getRecommendedMatches);
+          return r;
+        }).catch((err) => {
+          console.error("[matching] getRecommendedMatches FAILED:", err);
+          return { getRecommendedMatches: [] };
+        }),
         graphQL<{ getNotifications: NotificationItem[] }>(
           "notification",
           operations.getNotifications,
@@ -1143,6 +1151,7 @@ async function computeMatches(
   setStatus: (status: string) => void
 ) {
   if (!state.user) return;
+  console.log("[matching] computeMatches — userId:", state.user.id, "| token present:", !!token);
   try {
     const payload = await graphQL<{ computeMatches: Match[] }>(
       "matching",
@@ -1150,9 +1159,11 @@ async function computeMatches(
       { userId: state.user.id },
       token
     );
+    console.log("[matching] computeMatches response:", payload.computeMatches.length, "matches", payload.computeMatches);
     setState((current) => ({ ...current, matches: payload.computeMatches }));
     setStatus("Matches computed.");
   } catch (error) {
+    console.error("[matching] computeMatches FAILED:", error);
     setStatus(getErrorMessage(error, "Could not compute matches."));
   }
 }
