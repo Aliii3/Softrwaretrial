@@ -22,7 +22,7 @@ export const availabilityClient = makeClient(
 );
 
 export const sessionClient = makeClient(
-  process.env.NEXT_PUBLIC_SESSION_API || "https://studysessionservice-production.up.railway.app/graphql"
+  process.env.NEXT_PUBLIC_SESSION_API || "/api/session"
 );
 
 export const notificationClient = makeClient(
@@ -30,7 +30,7 @@ export const notificationClient = makeClient(
 );
 
 export const matchingClient = makeClient(
-  process.env.NEXT_PUBLIC_MATCHING_API || "https://matching-service-production-7bb4.up.railway.app/graphql"
+  process.env.NEXT_PUBLIC_MATCHING_API || "/api/matching"
 );
 
 export const profileClient = makeClient(

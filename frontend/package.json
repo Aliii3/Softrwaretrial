@@ -6,22 +6,28 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@apollo/client": "^4.1.9",
+    "@prisma/client": "6.19.3",
     "graphql": "^16.14.0",
+    "graphql-yoga": "^5.0.0",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.468.0",
     "next": "^14.2.18",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20.17.6",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.18",
+    "prisma": "6.19.3",
     "typescript": "^5.6.3"
   }
 }
