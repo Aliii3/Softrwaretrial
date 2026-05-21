@@ -1,4 +1,5 @@
 import { createYoga, createSchema } from "graphql-yoga";
+import { GraphQLError } from "graphql";
 import prisma from "@/lib/sessionDb";
 
 const VALID_SESSION_TYPES = ["ONLINE", "IN_PERSON"];
@@ -6,10 +7,12 @@ const ACTIVE_STATUSES = ["SCHEDULED", "UPDATED"];
 
 const now = () => new Date().toISOString();
 
+const gqlError = (msg: string) => new GraphQLError(msg);
+
 const normalizeSessionType = (sessionType = "ONLINE") => {
   const normalized = sessionType.trim().toUpperCase();
   if (!VALID_SESSION_TYPES.includes(normalized))
-    throw new Error("Session type must be ONLINE or IN_PERSON");
+    throw gqlError("Session type must be ONLINE or IN_PERSON");
   return normalized;
 };
 
@@ -17,9 +20,9 @@ const normalizeDateRange = (startTime: string, endTime: string) => {
   const start = new Date(startTime);
   const end = new Date(endTime);
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()))
-    throw new Error("Session start and end time must be valid dates");
+    throw gqlError("Session start and end time must be valid dates");
   if (end <= start)
-    throw new Error("Session end time must be after start time");
+    throw gqlError("Session end time must be after start time");
   return {
     start: start.toISOString(),
     end: end.toISOString(),
@@ -28,9 +31,14 @@ const normalizeDateRange = (startTime: string, endTime: string) => {
 };
 
 const assertActive = (session: any) => {
-  if (!session) throw new Error("Study session not found");
+  if (!session) throw gqlError("Study session not found");
   if (!ACTIVE_STATUSES.includes(session.status))
-    throw new Error("Study session is not active");
+    throw gqlError("Study session is not active");
+};
+
+const handlePrismaError = (error: unknown): never => {
+  const msg = error instanceof Error ? error.message : "Database error";
+  throw new GraphQLError(msg);
 };
 
 const serialize = (s: any) => ({
@@ -132,33 +140,37 @@ const resolvers = {
     createStudySession: async (_: unknown, args: any) => {
       const { start, end, durationMinutes } = normalizeDateRange(args.startTime, args.endTime);
       const creatorId = args.creatorId || args.userId;
-      if (!creatorId) throw new Error("Session creator is required");
-      if (!args.creatorContact) throw new Error("Session creator contact info is required");
+      if (!creatorId) throw gqlError("Session creator is required");
+      if (!args.creatorContact) throw gqlError("Session creator contact info is required");
 
-      const session = await prisma.studySession.create({
-        data: {
-          title: args.title,
-          description: args.description || null,
-          topic: args.topic || args.subject,
-          startTime: start,
-          endTime: end,
-          durationMinutes,
-          sessionType: normalizeSessionType(args.sessionType),
-          status: "SCHEDULED",
-          creatorId,
-          receiverId: args.receiverId || null,
-          creatorContact: args.creatorContact,
-          receiverContact: args.receiverContact || null,
-          userId: creatorId,
-          subject: args.subject,
-          participants: {
-            create: [{ userId: creatorId, contactInfo: args.creatorContact, joinedAt: now() }],
+      try {
+        const session = await prisma.studySession.create({
+          data: {
+            title: args.title,
+            description: args.description || null,
+            topic: args.topic || args.subject,
+            startTime: start,
+            endTime: end,
+            durationMinutes,
+            sessionType: normalizeSessionType(args.sessionType),
+            status: "SCHEDULED",
+            creatorId,
+            receiverId: args.receiverId || null,
+            creatorContact: args.creatorContact,
+            receiverContact: args.receiverContact || null,
+            userId: creatorId,
+            subject: args.subject,
+            participants: {
+              create: [{ userId: creatorId, contactInfo: args.creatorContact, joinedAt: now() }],
+            },
           },
-        },
-        include: { participants: true },
-      });
+          include: { participants: true },
+        });
 
-      return serialize(session);
+        return serialize(session);
+      } catch (error) {
+        return handlePrismaError(error);
+      }
     },
 
     updateStudySession: async (_: unknown, { id, ...updates }: any) => {
@@ -299,6 +311,7 @@ const resolvers = {
 const { handleRequest } = createYoga({
   schema: createSchema({ typeDefs, resolvers }),
   graphqlEndpoint: "/api/session",
+  maskedErrors: false,
 });
 
 export { handleRequest as GET, handleRequest as POST, handleRequest as OPTIONS };

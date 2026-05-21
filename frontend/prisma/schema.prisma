@@ -8,7 +8,7 @@ datasource db {
 }
 
 model StudySession {
-  id              String                   @id @default(uuid())
+  id              String                    @id @default(uuid())
   title           String
   description     String?
   topic           String
@@ -16,16 +16,16 @@ model StudySession {
   endTime         String
   durationMinutes Int
   sessionType     String
-  status          String                   @default("SCHEDULED")
+  status          String                    @default("SCHEDULED")
   creatorId       String
   receiverId      String?
   creatorContact  String
   receiverContact String?
   userId          String
   subject         String
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
   participants    StudySessionParticipant[]
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
 }
 
 model StudySessionParticipant {
